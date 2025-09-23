@@ -1,0 +1,12 @@
+[project]
+name = "HKA Hochschul-Helper"
+description = "Fragen zur HKA via RAG/Web/ICS"
+
+
+default_environment = "default"
+
+
+[environments.default]
+
+
+auth = false

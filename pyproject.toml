@@ -1,0 +1,33 @@
+# pyproject.toml
+[project]
+name = "hka-helper"
+version = "0.1.0"
+description = "HKA Hochschul-Helper: Chainlit + Multi-Agent Orchestrierung + RAG + Tavily + ICS"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "chainlit>=1.2",
+    "langchain>=0.2",
+    "langchain-community>=0.2",
+    "langgraph>=0.2",
+    "openai>=1.40", # OpenRouter: OpenAI-kompatible API
+    "tavily-python>=0.5",
+    "python-dotenv>=1.0",
+    "pydantic>=2",
+    "chromadb>=0.5",
+    "pypdf>=4",
+    "tiktoken>=0.7",
+    "sentence-transformers>=3.0", # lokale Embeddings als Fallback
+    "unstructured>=0.15; platform_system!='Windows'",
+    "rapidfuzz>=3.9",
+    "windows-curses>=2.4.1",
+]
+
+
+[tool.uv]
+# optional: source oder index konfigurieren
+
+
+[tool.chainlit]
+author = "HKA Team"
+project_description = "Hochschul-Helper für die HKA"
