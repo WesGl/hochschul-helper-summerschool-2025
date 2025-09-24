@@ -6,7 +6,9 @@ from tavily import TavilyClient
 from ..models import LLM
 
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
-SEARCH_MODEL = os.getenv("RAG_MODEL", "openai/gpt-4o-mini")
+# SEARCH_MODEL = os.getenv("RAG_MODEL", "openai/gpt-4o-mini")
+SEARCH_MODEL = os.getenv("RAG_MODEL", "deepseek/deepseek-chat-v3.1:free")
+
 _llm = LLM(SEARCH_MODEL)
 
 

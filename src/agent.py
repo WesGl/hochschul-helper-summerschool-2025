@@ -1,29 +1,40 @@
 # src/agent.py
 from __future__ import annotations
-import os, json
-from typing import Literal, TypedDict, Optional
-from pydantic import BaseModel, Field
-from langgraph.graph import StateGraph, END
-from langchain_core.messages import HumanMessage, SystemMessage
-from models import LLM  # dein Wrapper
-from src.tools import rag, search, calendar
 
-GUARD_MODEL = os.getenv("GUARD_MODEL", "openai/gpt-4o-mini")
-SUPERVISOR_MODEL = os.getenv("SUPERVISOR_MODEL", "openai/gpt-4o-mini")
+import json
+import os
+from typing import Literal, Optional, TypedDict
+
+from langchain_core.messages import HumanMessage, SystemMessage
+from langgraph.graph import END, StateGraph
+from pydantic import BaseModel, Field
+
+from models import LLM  # dein Wrapper
+from src.tools import ics_calendar_tool, rag, search
+
+# GUARD_MODEL = os.getenv("GUARD_MODEL", "openai/gpt-4o-mini")
+GUARD_MODEL = os.getenv("GUARD_MODEL", "deepseek/deepseek-chat-v3.1:free")
+
+# SUPERVISOR_MODEL = os.getenv("SUPERVISOR_MODEL", "openai/gpt-4o-mini")
+SUPERVISOR_MODEL = os.getenv("SUPERVISOR_MODEL", "deepseek/deepseek-chat-v3.1:free")
+
 CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD", 0.6))
 
 _guard = LLM(GUARD_MODEL)
 _supervisor = LLM(SUPERVISOR_MODEL)
+
 
 # ---------- Strukturausgaben ----------
 class GuardResult(BaseModel):
     valid: bool
     reason: Optional[str] = None
 
+
 class Plan(BaseModel):
     tool: Literal["rag", "web", "calendar", "multi"] = "rag"
     query: str = Field(..., description="Kanonische Such-/RAG-Query")
     need_calendar: bool = False
+
 
 # ---------- Agent-State ----------
 class AgentState(TypedDict, total=False):
@@ -36,6 +47,7 @@ class AgentState(TypedDict, total=False):
     ics_filename: Optional[str]
     ics_bytes: Optional[bytes]
     done: bool
+
 
 # ---------- Prompts ----------
 GUARD_PROMPT = (
@@ -51,6 +63,7 @@ SUPERVISOR_PROMPT = (
     "Antworte als JSON {tool: rag|web|calendar|multi, query: string, need_calendar: bool}."
 )
 
+
 # ---------- Nodes ----------
 def guard_node(state: AgentState) -> AgentState:
     messages = [
@@ -65,16 +78,19 @@ def guard_node(state: AgentState) -> AgentState:
     state["guard"] = data
     return state
 
+
 def route_after_guard(state: AgentState) -> str:
     if not state["guard"].valid:
         return "deny"
     return "supervisor"
+
 
 def deny_node(state: AgentState) -> AgentState:
     reason = state["guard"].reason or "Policy"
     state["answer"] = f"❌ Anfrage abgelehnt: {reason}"
     state["done"] = True
     return state
+
 
 def supervisor_node(state: AgentState) -> AgentState:
     sys = SUPERVISOR_PROMPT.replace("THRESHOLD", str(CONFIDENCE_THRESHOLD))
@@ -90,6 +106,7 @@ def supervisor_node(state: AgentState) -> AgentState:
     state["plan"] = plan
     return state
 
+
 def route_tools(state: AgentState) -> str:
     tool = state["plan"].tool
     if tool == "rag":
@@ -100,6 +117,7 @@ def route_tools(state: AgentState) -> str:
         return "calendar"
     return "multi"
 
+
 def rag_node(state: AgentState) -> AgentState:
     q = state["plan"].query
     ans, conf, cites = rag.answer(q)
@@ -107,13 +125,14 @@ def rag_node(state: AgentState) -> AgentState:
     # optional Autonachschlag ins Web
     if state["plan"].need_calendar:
         # erzeugt zusätzlich ICS
-        ics_bytes, filename = calendar.make_ics_from_text(q)
+        ics_bytes, filename = ics_calendar_tool.make_ics_from_text(q)
         state["ics_bytes"], state["ics_filename"] = ics_bytes, filename
     if state.get("confidence", 0.0) < CONFIDENCE_THRESHOLD:
         # an Web-Node weiter
         return state
     state["done"] = True
     return state
+
 
 def web_node(state: AgentState) -> AgentState:
     q = state["plan"].query
@@ -123,18 +142,25 @@ def web_node(state: AgentState) -> AgentState:
         if "citations" in web:
             state["citations"] = web["citations"]
     if state["plan"].need_calendar:
-        ics_bytes, filename = calendar.make_ics_from_text(q)
+        ics_bytes, filename = ics_calendar_tool.make_ics_from_text(q)
         state["ics_bytes"], state["ics_filename"] = ics_bytes, filename
     state["done"] = True
     return state
 
-def calendar_node(state: AgentState) -> AgentState:
+
+def ics_calendar_node(state: AgentState) -> AgentState:
     q = state["plan"].query
-    ics_bytes, filename = calendar.make_ics_from_text(q)
+    ics_bytes, filename = ics_calendar_tool.make_ics_from_text(q)
     state["answer"] = "Kalenderdatei erstellt."
     state["ics_bytes"], state["ics_filename"] = ics_bytes, filename
     state["done"] = True
     return state
+
+
+def google_calendar_agent_node(state: AgentState) -> AgentState:
+
+    return state
+
 
 def multi_node(state: AgentState) -> AgentState:
     # RAG -> ggf. Web -> ggf. ICS
@@ -142,6 +168,7 @@ def multi_node(state: AgentState) -> AgentState:
     if not state.get("done"):
         state = web_node(state)
     return state
+
 
 # ---------- Graph bauen ----------
 def build_agent():
@@ -151,7 +178,7 @@ def build_agent():
     g.add_node("supervisor", supervisor_node)
     g.add_node("rag", rag_node)
     g.add_node("web", web_node)
-    g.add_node("calendar", calendar_node)
+    g.add_node("calendar", ics_calendar_node)
     g.add_node("multi", multi_node)
 
     g.set_entry_point("guard")
@@ -160,7 +187,7 @@ def build_agent():
         route_after_guard,
         {"deny": "deny", "supervisor": "supervisor"},
     )
-    
+
     # Router-Knoten als Bedingung
     g.add_conditional_edges(
         "supervisor",
@@ -176,7 +203,9 @@ def build_agent():
 
     return g.compile()
 
+
 AGENT_GRAPH = build_agent()
+
 
 def run_agent(user_msg: str) -> dict:
     state: AgentState = {"user_msg": user_msg}

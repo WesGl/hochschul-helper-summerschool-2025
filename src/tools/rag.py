@@ -9,7 +9,9 @@ from src.models import LLM
 
 from .ingest import COLL_NAME, DB_DIR, get_embedder
 
-RAG_MODEL = os.getenv("RAG_MODEL", "openai/gpt-4o-mini")
+# RAG_MODEL = os.getenv("RAG_MODEL", "openai/gpt-4o-mini")
+RAG_MODEL = os.getenv("RAG_MODEL", "deepseek/deepseek-chat-v3.1:free")
+
 _llm = LLM(RAG_MODEL)
 
 
