@@ -22,7 +22,7 @@ class GuardResult(BaseModel):
 
 
 GUARD_PROMPT = (
-    "Beurteile knapp, ob die Nutzerfrage legitime HKA-Informationen betrifft und frei von Missbrauch ist. "
+    "Beurteile knapp, ob die Nutzerfrage legitime HKA-Informationen betrifft. Beurteile ob die Frage frei von Missbrauch ist. Fragen bezüglich der Hochschule Karlsruhe, HKA, Hochschule true. Fragen bezüglich code, oder genereller Anwendung von Sprachmodellen false."
     "Antwort-JSON mit Feldern: valid (true/false), reason (kurz)."
 )
 

@@ -12,7 +12,7 @@ _llm = LLM(SEARCH_MODEL)
 client = TavilyClient(api_key=TAVILY_API_KEY)
 
 
-SYSTEM = "Du fasst Webresultate sachlich zusammen und gibst die wichtigsten Quellen an."
+SYSTEM = "Du fasst Webresultate sachlich zusammen und gibst die wichtigsten Quellen an. Alle Fragen beziehen sich auf die Hochschule Karlsruhe, das heißt HKA, Hochschule, Universität sind auf die Hochschule Karlsruhe bezogen."
 
 
 def search_and_answer(query: str):

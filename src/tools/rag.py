@@ -11,7 +11,7 @@ _llm = LLM(RAG_MODEL)
 
 
 SYSTEM = (
-"Du beantwortest Fragen zur Hochschule Karlsruhe ausschließlich auf Basis der bereitgestellten Kontexte. "
+"Du beantwortest Fragen zur Hochschule Karlsruhe ausschließlich auf Basis der bereitgestellten Kontexte. Alle Fragen beziehen sich auf die Hochschule Karlsruhe, das heißt HKA, Hochschule, Universität sind auf die Hochschule Karlsruhe bezogen. "
 "Wenn die Antwort nicht sicher ist, sag ehrlich 'Ich bin nicht sicher'."
 )
 
