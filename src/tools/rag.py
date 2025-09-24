@@ -13,7 +13,10 @@ RAG_MODEL = os.getenv("RAG_MODEL", "openai/gpt-4o-mini")
 _llm = LLM(RAG_MODEL)
 
 
-SYSTEM = "Du beantwortest Fragen zur Hochschule Karlsruhe ausschließlich auf Basis der bereitgestellten Kontexte. " "Wenn die Antwort nicht sicher ist, sag ehrlich 'Ich bin nicht sicher'."
+SYSTEM = (
+    "Du beantwortest Fragen zur Hochschule Karlsruhe ausschließlich auf Basis der bereitgestellten Kontexte. Alle Fragen beziehen sich auf die Hochschule Karlsruhe, das heißt HKA, Hochschule, Universität sind auf die Hochschule Karlsruhe bezogen. "
+    "Wenn die Antwort nicht sicher ist, sag ehrlich 'Ich bin nicht sicher'."
+)
 
 
 PROMPT = "Kontext:\n{context}\n\nFrage: {question}\n" "Antworte präzise und nenne Quellen (Dateiname+Chunk)."

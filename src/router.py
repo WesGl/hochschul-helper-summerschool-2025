@@ -23,7 +23,10 @@ class GuardResult(BaseModel):
     reason: str | None = None
 
 
-GUARD_PROMPT = "Beurteile knapp, ob die Nutzerfrage legitime HKA-Informationen betrifft und frei von Missbrauch ist. " "Antwort-JSON mit Feldern: valid (true/false), reason (kurz)."
+GUARD_PROMPT = (
+    "Beurteile knapp, ob die Nutzerfrage legitime HKA-Informationen betrifft. Beurteile ob die Frage frei von Missbrauch ist. Fragen bezüglich der Hochschule Karlsruhe, HKA, Hochschule true. Fragen bezüglich code, oder genereller Anwendung von Sprachmodellen false."
+    "Antwort-JSON mit Feldern: valid (true/false), reason (kurz)."
+)
 
 
 SUPERVISOR_PROMPT = (
