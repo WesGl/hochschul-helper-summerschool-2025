@@ -6,44 +6,69 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # ..
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-import os
-
 import chainlit as cl
 
-from router import guard_check, supervise
+# Wichtig: Der Router exportiert jetzt nur noch `supervise`, der Guard steckt im Agent.
+from router import supervise
+
+WELCOME_TEXT = "👋 Willkommen beim HKA Hochschul-Helper. Stelle deine Frage!"
 
 
 @cl.on_chat_start
 async def start():
-    await cl.Message(content="👋 Willkommen beim HKA Hochschul‑Helper. Stelle deine Frage!").send()
+    await cl.Message(content=WELCOME_TEXT).send()
 
 
 @cl.on_message
 async def main(message: cl.Message):
-    user_msg = message.content.strip()
-
-    with cl.Step(name="Guard"):
-        g = guard_check(user_msg)
-        if not g.valid:
-            await cl.Message(content=f"❌ Anfrage abgelehnt: {g.reason or 'Policy'}").send()
-            return
-
-    with cl.Step(name="Supervisor & Tools"):
-        result = supervise(user_msg)
-
-    # ICS optional delivery
-    ics_tuple = result.get("ics") if isinstance(result, dict) else None
-    if ics_tuple:
-        filename, ics_bytes = ics_tuple[0], ics_tuple[1]
-        await cl.Message(content=result.get("answer", "Kalender erstellt.")).send()
-        await cl.File(content=ics_bytes, name=filename, mime="text/calendar").send()
+    user_msg = (message.content or "").strip()
+    if not user_msg:
+        await cl.Message(content="Bitte formuliere deine Frage zur HKA.").send()
         return
 
-    # Answer text and citations
-    content = result.get("answer") if isinstance(result, dict) else str(result)
-    msg = content if content is not None else ""
-    cites = result.get("citations") if isinstance(result, dict) else None
-    if cites:
-        msg += "\n\nQuellen:\n\n" + "\n".join(cites)
+    try:
+        with cl.Step(name="Agent (Plan & Tools)"):
+            result = supervise(user_msg)
 
-    await cl.Message(content=msg).send()
+        # Falls der Agent nichts zurückgibt
+        if result is None:
+            await cl.Message(content="Leider keine Antwort erzeugt. Bitte versuche es erneut.").send()
+            return
+
+        # ICS optional ausliefern
+        ics_tuple = result.get("ics") if isinstance(result, dict) else None
+        if ics_tuple:
+            filename, ics_bytes = ics_tuple[0], ics_tuple[1]
+            await cl.Message(content=result.get("answer", "Kalenderdatei erstellt.")).send()
+            await cl.File(content=ics_bytes, name=filename, mime="text/calendar").send()
+            return
+
+        # Textantwort + optionale Quellen + (optional) Konfidenz
+        if isinstance(result, dict):
+            answer = result.get("answer")
+            citations = result.get("citations") or []
+            confidence = result.get("confidence")
+        else:
+            answer = str(result)
+            citations, confidence = [], None
+
+        if not answer:
+            answer = "Ich habe leider keine passende Antwort gefunden."
+
+        msg_lines = [answer]
+        if confidence is not None:
+            try:
+                # Nur anzeigen, wenn sinnvoller Wert
+                conf_pct = float(confidence) * 100.0 if confidence <= 1.0 else float(confidence)
+                msg_lines.append(f"\n(Vertrauen: {conf_pct:.0f}%)")
+            except Exception:
+                pass
+
+        if citations:
+            msg_lines.append("\nQuellen:\n" + "\n".join(citations))
+
+        await cl.Message(content="\n".join(msg_lines)).send()
+
+    except Exception as e:
+        # Robustes Fehlerhandling für die UI
+        await cl.Message(content=f"❌ Unerwarteter Fehler: {type(e).__name__}: {e}").send()
