@@ -20,8 +20,8 @@ dependencies = [
     "sentence-transformers>=3.0", # lokale Embeddings als Fallback
     "unstructured>=0.15; platform_system!='Windows'",
     "rapidfuzz>=3.9",
-    "windows-curses>=2.4.1",
 ]
+
 
 
 [tool.uv]

@@ -1,8 +1,9 @@
 # src/tools/search.py
-from tavily import TavilyClient
 import os
-from ..models import LLM
 
+from tavily import TavilyClient
+
+from ..models import LLM
 
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 SEARCH_MODEL = os.getenv("RAG_MODEL", "openai/gpt-4o-mini")
@@ -23,7 +24,6 @@ def search_and_answer(query: str):
         snippet = r.get("content", "")[:1000]
         blocks.append(f"- {r['title']}\n {r['url']}\n {snippet}")
     context = "\n\n".join(blocks)
-
 
     msg = [
         {"role": "system", "content": SYSTEM},

@@ -1,12 +1,13 @@
 # src/tools/ingest.py
 from __future__ import annotations
+
 import os
 from pathlib import Path
 from typing import Iterable
-from pypdf import PdfReader
-from chromadb import PersistentClient
-from sentence_transformers import SentenceTransformer
 
+from chromadb import PersistentClient
+from pypdf import PdfReader
+from sentence_transformers import SentenceTransformer
 
 DB_DIR = Path("vectordb")
 COLL_NAME = "hka"
@@ -30,7 +31,7 @@ def chunk_text(text: str, chunk_size=1000, overlap=150) -> list[str]:
     chunks = []
     i = 0
     while i < len(text):
-        chunks.append(text[i:i+chunk_size])
+        chunks.append(text[i : i + chunk_size])
         i += chunk_size - overlap
     return chunks
 
@@ -45,9 +46,7 @@ def ingest_pdfs(pdf_dir: Path = Path("data/pdfs")):
     client = PersistentClient(path=str(DB_DIR))
     coll = client.get_or_create_collection(COLL_NAME, metadata={"hnsw:space": "cosine"})
 
-
     embedder = get_embedder()
-
 
     docs, ids, metas = [], [], []
     for pdf in pdf_dir.glob("**/*.pdf"):
@@ -57,17 +56,16 @@ def ingest_pdfs(pdf_dir: Path = Path("data/pdfs")):
             ids.append(f"{pdf.name}:{idx}")
             metas.append({"source": pdf.name, "chunk": idx})
 
-
     if not docs:
         return 0
 
-
     vectors = embedder.encode(docs, show_progress_bar=True).tolist()
+
     def _batched(n: int, size: int):
         for i in range(0, n, size):
             yield i, min(i + size, n)
 
-    BATCH_SIZE = 1000  # muss < 5461 bleiben (Fehlergrenze)
+    BATCH_SIZE = 1000  # has to be < 5461 for hnsw index
 
     total = len(docs)
     for start, end in _batched(total, BATCH_SIZE):

@@ -1,25 +1,22 @@
 # src/tools/rag.py
 from __future__ import annotations
+
 import os
+
 from chromadb import PersistentClient
-from .ingest import DB_DIR, COLL_NAME, get_embedder
+
 from src.models import LLM
 
+from .ingest import COLL_NAME, DB_DIR, get_embedder
 
 RAG_MODEL = os.getenv("RAG_MODEL", "openai/gpt-4o-mini")
 _llm = LLM(RAG_MODEL)
 
 
-SYSTEM = (
-"Du beantwortest Fragen zur Hochschule Karlsruhe ausschließlich auf Basis der bereitgestellten Kontexte. "
-"Wenn die Antwort nicht sicher ist, sag ehrlich 'Ich bin nicht sicher'."
-)
+SYSTEM = "Du beantwortest Fragen zur Hochschule Karlsruhe ausschließlich auf Basis der bereitgestellten Kontexte. " "Wenn die Antwort nicht sicher ist, sag ehrlich 'Ich bin nicht sicher'."
 
 
-PROMPT = (
-"Kontext:\n{context}\n\nFrage: {question}\n"
-"Antworte präzise und nenne Quellen (Dateiname+Chunk)."
-)
+PROMPT = "Kontext:\n{context}\n\nFrage: {question}\n" "Antworte präzise und nenne Quellen (Dateiname+Chunk)."
 
 
 def retrieve(query: str, k: int = 6):
@@ -33,8 +30,6 @@ def retrieve(query: str, k: int = 6):
     return list(zip(docs, metas))
 
 
-
-
 def answer(query: str):
     hits = retrieve(query)
     context = "\n\n".join([f"[{m['source']}#{m['chunk']}]\n{d}" for d, m in hits])
@@ -44,8 +39,7 @@ def answer(query: str):
     ]
     out = _llm.chat(msg)
 
-
-    # naive Konfidenzschätzung: Länge & Trefferzahl
+    # naive confidence estimation: length & number of hits
     conf = min(0.95, 0.3 + 0.1 * len(hits)) if hits else 0.2
     cites = [f"{m['source']}#{m['chunk']}" for _, m in hits]
     return out, conf, cites

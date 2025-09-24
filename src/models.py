@@ -1,9 +1,10 @@
 # src/models.py
 from __future__ import annotations
-from dotenv import load_dotenv
-import os
-from openai import OpenAI
 
+import os
+
+from dotenv import load_dotenv
+from openai import OpenAI
 
 load_dotenv()
 

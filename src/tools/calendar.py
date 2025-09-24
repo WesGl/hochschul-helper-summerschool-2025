@@ -1,7 +1,8 @@
 # src/tools/calendar.py
 from __future__ import annotations
-from datetime import datetime, timedelta
+
 import re
+from datetime import datetime, timedelta
 
 
 def make_ics(summary: str, start: datetime, end: datetime, location: str | None = None, description: str | None = None):
@@ -25,7 +26,7 @@ def make_ics(summary: str, start: datetime, end: datetime, location: str | None 
     return "\n".join(lines).encode("utf-8")
 
 
-# Sehr einfache NLP-Heuristik als Beispiel
+# simple NLP heuristic as an example
 _DEF_DURATION = timedelta(hours=1)
 
 
