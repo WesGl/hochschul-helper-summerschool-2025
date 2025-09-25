@@ -36,9 +36,8 @@ def retrieve(query: str, k: int = 6):
 
 
 def answer(query: str):
-    print(f"RAG query: {query}")
+    print(f"Normal RAG answer requested")
     hits = retrieve(query)
-    print(f"RAG hits: {hits}")
     context = "\n\n".join([f"[{m['source']}#{m['chunk']}]\n{d}" for d, m in hits])
     msg = [
         {"role": "system", "content": SYSTEM},

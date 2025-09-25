@@ -48,16 +48,17 @@ class AgentState(TypedDict, total=False):
 # ---------- Prompts ----------
 GUARD_PROMPT = (
     "Beurteile knapp, ob die Nutzerfrage legitime HKA-Informationen betrifft. "
-    "Legitime Themen (Termine, Stundenplan, Kalender, Prüfungen, HKA-Infos) -> true. "
+    "Legitime Themen (Termine, Stundenplan, Kalender, Prüfungen, HKA-Infos, Termine in Kalender eintragen, Vorlesungsinformationen) -> true. "
     "Missbrauch/Off-Topic (Code, allgemeine LLM-Fragen) -> false. "
     "Antworte als kompaktes JSON {valid: bool, reason: string?}."
 )
 
+
 SUPERVISOR_PROMPT = (
     "Du bist ein Tool-Router für HKA-Anfragen. "
     "Wähle das beste Tool basierend auf der Anfrage:\n"
-    "- 'rag_calendar': Für Termine, Stundenplan, Kalenderfragen\n"
-    "- 'rag': Für allgemeine HKA-Informationen mit Web-Fallback\n"
+    "- 'rag_calendar': Für Stundenplan, Vorlesungstermine, Veranstaltungen, 'wann ist', Kalenderfragen, Termine in Kalender eintragen, Termine ausgeben, Termine verschieben\n"
+    "- 'rag': Für allgemeine HKA-Informationen mit Web-Fallback. Nicht geeignet für Kalenderanfragen und Vorlesungstermine. Die gespeicherten PDF Dateien enthalten ausschließlich die Studien und Prüfungsordnungen (SPO), Modulhandbücher, Rechenzentrum (rz) Flyer (Anleitungen) und Zulassungssatzungen.\n"
     "- 'web': Für aktuelle/spezifische Infos mit RAG-Fallback\n"
     "Antworte als JSON {tool: rag|web|rag_calendar, query: string}."
 )
