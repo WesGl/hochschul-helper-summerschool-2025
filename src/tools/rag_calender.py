@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import os
 
-from chromadb import PersistentClient
+from langchain.vectorstores import Chroma
+from langchain_huggingface import HuggingFaceEmbeddings
 
 from src.models import LLM
 
@@ -41,20 +42,32 @@ USER_PROMPT = """Hier sind relevante Dokumenten-Auszüge (Kontext) aus den Stund
             Füge am Ende deiner Antwort IMMER die Quelle(n) aus den Metadaten (`source_file`) hinzu."""
 
 
-def retrieve(query: str, k: int = 6):
-    client = PersistentClient(path=str(CHROMA_PERSIST_DIR))
-    coll = client.get_or_create_collection(CHROMA_COLLECTION_NAME)
-    embedder = get_embedder()
-    qv = embedder.encode([query]).tolist()
-    res = coll.query(query_embeddings=qv, n_results=k)
-    docs = res.get("documents", [[]])[0]
-    metas = res.get("metadatas", [[]])[0]
-    return list(zip(docs, metas))
+def make_retriever(faculty=None, major=None, semester=None, k=5):
+    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    db = Chroma(persist_directory=CHROMA_PERSIST_DIR, collection_name=CHROMA_COLLECTION_NAME, embedding_function=embeddings)
+    # create metadata filter dict if provided
+    metadata_filter = {}
+    if faculty:
+        metadata_filter["faculty"] = faculty
+    if major:
+        metadata_filter["major"] = major
+    if semester:
+        metadata_filter["semester"] = semester
+
+    retriever = db.as_retriever(search_kwargs={"k": k})
+    # The Chroma retriever supports passing filter args at query time; we'll show how below.
+    return db, retriever, metadata_filter
+
+
+def retrieve(query: str, k: int = 6,  faculty=None, major=None, semester=None):
+    db, retriever, meta_filter = make_retriever(faculty, major, semester, k)
+    docs = db.similarity_search(query, k=6)
+    return docs
 
 
 def answer(query: str):
     hits = retrieve(query)
-    context = "\n\n".join([f"[{m['source']}#{m['chunk']}]\n{d}" for d, m in hits])
+    context = "\n\n---\n\n".join([d.page_content for d in hits])
     msg = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": USER_PROMPT.format(context=context, question=query)},
