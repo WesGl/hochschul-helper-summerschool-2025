@@ -9,8 +9,9 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, StateGraph
 from pydantic import BaseModel, Field
 
-from models import LLM  # dein Wrapper
+from src.models import LLM
 from src.tools import google_calendar_tool, rag, search
+from src.tools.rag_calender import answer as calendar_rag_answer
 
 GUARD_MODEL = os.getenv("GUARD_MODEL", "deepseek/deepseek-chat-v3.1:free")
 SUPERVISOR_MODEL = os.getenv("SUPERVISOR_MODEL", "deepseek/deepseek-chat-v3.1:free")
@@ -47,15 +48,17 @@ class AgentState(TypedDict, total=False):
 # ---------- Prompts ----------
 GUARD_PROMPT = (
     "Beurteile knapp, ob die Nutzerfrage legitime HKA-Informationen betrifft. "
+    "Legitime Themen (Termine, Stundenplan, Kalender, Prüfungen, HKA-Infos, Termine in Kalender eintragen, Vorlesungsinformationen) -> true. "
     "Missbrauch/Off-Topic (Code, allgemeine LLM-Fragen) -> false. "
     "Antworte als kompaktes JSON {valid: bool, reason: string?}."
 )
 
+
 SUPERVISOR_PROMPT = (
     "Du bist ein Tool-Router für HKA-Anfragen. "
     "Wähle das beste Tool basierend auf der Anfrage:\n"
-    "- 'rag_calendar': Für Termine, Stundenplan, Kalenderfragen\n"
-    "- 'rag': Für allgemeine HKA-Informationen mit Web-Fallback\n"
+    "- 'rag_calendar': Für Stundenplan, Vorlesungstermine, Veranstaltungen, 'wann ist', Kalenderfragen, Termine in Kalender eintragen, Termine ausgeben, Termine verschieben\n"
+    "- 'rag': Für allgemeine HKA-Informationen mit Web-Fallback. Nicht geeignet für Kalenderanfragen und Vorlesungstermine. Die gespeicherten PDF Dateien enthalten ausschließlich die Studien und Prüfungsordnungen (SPO), Modulhandbücher, Rechenzentrum (rz) Flyer (Anleitungen) und Zulassungssatzungen.\n"
     "- 'web': Für aktuelle/spezifische Infos mit RAG-Fallback\n"
     "Antworte als JSON {tool: rag|web|rag_calendar, query: string}."
 )
@@ -154,8 +157,8 @@ def rag_calendar_node(state: AgentState) -> AgentState:
     """Step 1: HKA timetable RAG lookup only"""
     q = state["plan"].query
 
-    # Only do RAG lookup for HKA events/timetable
-    timetable_ans, timetable_conf, timetable_cites = rag.answer(f"HKA Stundenplan Termine Veranstaltungen: {q}")
+    # Use the timetables-specific RAG instead of general RAG
+    timetable_ans, timetable_conf, timetable_cites = calendar_rag_answer(f"HKA Stundenplan Termine Veranstaltungen: {q}")
 
     # Store results for calendar agent
     state["hka_rag_results"] = {"answer": timetable_ans, "confidence": float(timetable_conf), "citations": timetable_cites or []}
@@ -170,14 +173,16 @@ def calendar_agent_node(state: AgentState) -> AgentState:
     hka_context = state.get("hka_rag_results", {})
 
     try:
-        # Enhanced logging
         import logging
 
         logger = logging.getLogger(__name__)
         logger.info(f"Calendar agent processing: {user_intent}")
         logger.info(f"HKA context available: {bool(hka_context.get('answer'))}")
 
-        calendar_result = google_calendar_tool.process_calendar_request(query=original_query, hka_context=hka_context.get("answer", ""), user_intent=user_intent)
+        # Import the calendar tool function
+        from src.tools.google_calendar_tool import process_calendar_request
+
+        calendar_result = process_calendar_request(query=original_query, hka_context=hka_context.get("answer", ""), user_intent=user_intent)
 
         state["answer"] = calendar_result.get("message", "Kalenderoperation durchgeführt.")
         state["calendar_events"] = calendar_result.get("events", [])
@@ -186,10 +191,11 @@ def calendar_agent_node(state: AgentState) -> AgentState:
 
         logger.info(f"Calendar operation completed with confidence: {state['confidence']}")
 
+    except ImportError as e:
+        logger.error(f"Calendar tool import error: {e}")
+        state["answer"] = f"❌ Kalenderfunktion nicht verfügbar: Modul-Import-Fehler"
+        state["confidence"] = 0.2
     except Exception as e:
-        import logging
-
-        logger = logging.getLogger(__name__)
         logger.error(f"Calendar agent error: {str(e)}")
 
         # Enhanced fallback with partial HKA info
@@ -213,7 +219,7 @@ def build_agent():
     g.add_node("rag", rag_node)
     g.add_node("web", web_node)
     g.add_node("rag_calendar", rag_calendar_node)
-    g.add_node("calendar_agent", calendar_agent_node)  # New node
+    g.add_node("calendar_agent", calendar_agent_node)
 
     g.set_entry_point("guard")
     g.add_conditional_edges(
@@ -234,7 +240,7 @@ def build_agent():
     g.add_edge("deny", END)
     g.add_edge("rag", END)
     g.add_edge("web", END)
-    g.add_edge("calendar_agent", END)  # Calendar agent goes to END
+    g.add_edge("calendar_agent", END)
 
     return g.compile()
 

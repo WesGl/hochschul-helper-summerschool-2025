@@ -359,6 +359,12 @@ def process_calendar_request(query: str, hka_context: str, user_intent: str = No
     # Enhanced intent detection with better keyword matching
     intent_lower = user_intent.lower()
 
+    # TIMETABLE/SCHEDULE QUERY intents - NEW
+    timetable_keywords = ["vorlesung", "veranstaltung", "stundenplan", "termine", "wann ist", "welche vorlesung", "kurs"]
+    if any(keyword in intent_lower for keyword in timetable_keywords) and hka_context:
+        # Return timetable information from HKA context
+        return {"message": f"📅 Stundenplan-Informationen:\n{hka_context}", "events": [], "confidence": 0.9}  # Could be enhanced to parse events from hka_context
+
     # CREATE intents
     create_keywords = ["erstelle", "plane", "trage ein", "add", "create", "hinzufügen", "eintragen", "importiere"]
     if any(keyword in intent_lower for keyword in create_keywords):
@@ -379,7 +385,11 @@ def process_calendar_request(query: str, hka_context: str, user_intent: str = No
     # LIST intents
     list_keywords = ["zeige", "list", "welche termine", "übersicht", "termine", "anzeigen", "auflisten"]
     if any(keyword in intent_lower for keyword in list_keywords):
-        return _handle_list_events(user_intent)
+        # Check if asking for timetable or calendar events
+        if any(kw in intent_lower for kw in timetable_keywords) and hka_context:
+            return {"message": f"📅 Stundenplan-Übersicht:\n{hka_context}", "events": [], "confidence": 0.9}
+        else:
+            return _handle_list_events(user_intent)
 
     # Default: provide HKA information with suggestion for calendar actions
     suggestion = "\n\nMögliche Aktionen: 'Erstelle Termine', 'Zeige meine Termine', 'Lösche Termin X'"
@@ -395,10 +405,13 @@ def _handle_create_from_hka(hka_context: str, user_intent: str) -> dict:
         # Parse HKA context for event details using LLM
         extraction_prompt = (
             f"Extract calendar events from this HKA timetable information:\n"
+            f"You can only plan events for the upcoming week"
+            f"To create events ignore the date information and only use the day of the week and time.\n"
             f"{hka_context}\n\n"
             f"User intent: {user_intent}\n\n"
-            f"Extract event details and respond with JSON array:\n"
+            f"Extract event details and respond ONLY with valid JSON array (no other text):\n"
             f'[{{"title": "Course Name", "start_date": "YYYY-MM-DD", "start_time": "HH:MM", "end_time": "HH:MM", "location": "Room", "description": "Details"}}]'
+            f"if no events found, respond with empty array []"
         )
 
         messages = [{"role": "user", "content": extraction_prompt}]
