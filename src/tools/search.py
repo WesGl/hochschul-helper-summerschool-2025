@@ -128,6 +128,7 @@ def search_and_answer(
     - scope in {"general","fachschaft","hka"}: explizit erzwingen
     Rückgabe: {"answer": <str>, "citations": [<url>, ...]}
     """
+    print(f"TOOL search_and_answer was called")
     # 1) Scope bestimmen
     if scope is None or str(scope).lower() == "auto":
         routed = _route_scope_with_llm(query)
@@ -163,10 +164,12 @@ def search_and_answer(
         context = _build_context(results, max_snippet_chars=max_snippet_chars)
         summary = _summarize(context, used_query, scope_enum)
         citations = [r.get("url") for r in results if r.get("url")]
+        print(f"TOOL search_and_answer finished")
         return {"answer": summary, "citations": citations}
 
     # 5) Keine Treffer
     msg = "Es wurden keine geeigneten Treffer gefunden."
+    print(f"TOOL search_and_answer finished - no results")
     return {"answer": msg, "citations": []}
 
 

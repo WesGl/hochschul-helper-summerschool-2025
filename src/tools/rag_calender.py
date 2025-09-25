@@ -72,7 +72,7 @@ def retrieve(query: str, k: int = 6, faculty=None, major=None, semester=None):
 
 
 def answer(query: str):
-    print(f"Calendar RAG answer requested")
+    print(f"TOOL Calendar RAG answer was called")
     hits = retrieve(query)
     context = "\n\n---\n\n".join([d.page_content for d in hits])
     msg = [
@@ -85,4 +85,5 @@ def answer(query: str):
     conf = min(0.95, 0.3 + 0.1 * len(hits)) if hits else 0.2
     # cites = [f"{m['source']}#{m['chunk']}" for _, m in hits]
     cites = [d.metadata.get("source_file", "unknown") for d in hits if hasattr(d, "metadata")]
+    print(f"TOOL Calendar RAG answer finished")
     return out, conf, cites

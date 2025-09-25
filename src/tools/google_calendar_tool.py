@@ -21,9 +21,6 @@ from src.utils.google_calendar_utils import (
     api_resource,
 )
 
-# from langchain_openai import ChatOpenAI
-
-
 load_dotenv()
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
@@ -58,14 +55,17 @@ def create_event_tool(
     Returns:
         str: Confirmation message with event link.
     """
+    print(f"TOOL create_event_tool was called")
     timezone = "Europe/Berlin"
     try:
         tool = CreateGoogleCalendarEvent(api_resource)
         result = tool._run(start_datetime=start_datetime, end_datetime=end_datetime, summary=summary, location=location, description=description, timezone=timezone)
         logger.info(f"Created event: {summary} from {start_datetime} to {end_datetime}")
+        print(f"TOOL create_event_tool finished")
         return result
     except Exception as e:
         logger.error(f"Error creating event: {e}")
+        print(f"TOOL create_event_tool finished with error")
         return f"❌ Error creating event: {e}"
 
 
@@ -87,14 +87,17 @@ def list_events_tool(
     Returns:
         list: List of event dicts (each includes event ID, summary, times, etc.).
     """
+    print(f"TOOL list_events_tool was called")
     timezone = "Europe/Berlin"
     try:
         tool = ListGoogleCalendarEvents(api_resource)
         events = tool._run(start_datetime=start_datetime, end_datetime=end_datetime, max_results=max_results, timezone=timezone)
         logger.info(f"Listed {len(events)} events from {start_datetime} to {end_datetime}")
+        print(f"TOOL list_events_tool finished")
         return events
     except Exception as e:
         logger.error(f"Error listing events: {e}")
+        print(f"TOOL list_events_tool finished with error")
         return []
 
 
@@ -110,6 +113,7 @@ def postpone_event_tool(user_query: str) -> str:
     Returns:
         str: Confirmation message or error.
     """
+    print(f"TOOL postpone_event_tool was called")
     timezone = "Europe/Berlin"
 
     # Get upcoming events (next 7 days)
@@ -119,6 +123,7 @@ def postpone_event_tool(user_query: str) -> str:
     events = list_events_tool.invoke({"start_datetime": start_search, "end_datetime": end_search, "max_results": 50})
 
     if not events:
+        print(f"TOOL postpone_event_tool finished - no events found")
         return "No upcoming events found."
 
     # Prepare event options for the LLM
@@ -161,11 +166,13 @@ def postpone_event_tool(user_query: str) -> str:
 
     except (json.JSONDecodeError, Exception) as e:
         logger.error(f"Error parsing LLM response: {e}")
+        print(f"TOOL postpone_event_tool finished with parsing error")
         return f"❌ Could not understand the postponement request: {e}"
 
     # Find the selected event
     event = next((e for e in events if e.get("id") == event_id), None)
     if not event:
+        print(f"TOOL postpone_event_tool finished - event not found")
         return f"❌ Event not found: {event_id}"
 
     # Calculate new times based on original event times
@@ -187,10 +194,12 @@ def postpone_event_tool(user_query: str) -> str:
         tool = PostponeGoogleCalendarEvent(api_resource)
         result = tool._run(event_id=event_id, new_start_datetime=new_start_datetime, new_end_datetime=new_end_datetime, timezone=timezone)
 
+        print(f"TOOL postpone_event_tool finished")
         return f"✅ Postponed '{event.get('summary')}' by {hours_to_add}h {minutes_to_add}m → {result}"
 
     except Exception as e:
         logger.error(f"Error postponing event: {e}")
+        print(f"TOOL postpone_event_tool finished with error")
         return f"❌ Error postponing event: {e}"
 
 
@@ -206,6 +215,7 @@ def delete_event_tool(user_query: str) -> str:
     Returns:
         str: Confirmation message or error.
     """
+    print(f"TOOL delete_event_tool was called")
     # Get upcoming events (next 7 days)
     start_search = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     end_search = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%S")
@@ -213,6 +223,7 @@ def delete_event_tool(user_query: str) -> str:
     events = list_events_tool.invoke({"start_datetime": start_search, "end_datetime": end_search, "max_results": 50})
 
     if not events:
+        print(f"TOOL delete_event_tool finished - no events found")
         return "No upcoming events found."
 
     # Prepare event options for the LLM
@@ -265,6 +276,7 @@ def delete_event_tool(user_query: str) -> str:
             logger.error(msg)
             deleted_events.append(msg)
 
+    print(f"TOOL delete_event_tool finished")
     return "\n".join(deleted_events)
 
 
@@ -312,10 +324,6 @@ def test_calendar_tools():
     logger.info(f"Result Create: {result}")
 
     # --- Test listing tool ---
-    # Use a wider time range to capture both created events
-    today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    tomorrow_end = today_start + timedelta(days=1)
-
     result = list_events_tool.invoke(
         {
             "start_datetime": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
@@ -326,11 +334,6 @@ def test_calendar_tools():
     logger.info(f"Result List: {result}")
 
     # --- Test postpone and delete tools ---
-    # Test postponing the first event (Meeting with Bob)
-    # Calculate new times: postpone by 2 hours
-    new_start_time_1 = start_time_1 + timedelta(hours=2)
-    new_end_time_1 = end_time_1 + timedelta(hours=2)
-
     result = postpone_event_tool.invoke(
         {
             "user_query": "postpone Meeting with Bob by 2 hours",
@@ -338,7 +341,6 @@ def test_calendar_tools():
     )
     logger.info(f"Result Postpone: {result}")
 
-    # Test deleting the second event (Kickoff with Alice)
     result = delete_event_tool.invoke(
         {
             "user_query": "delete Kickoff with Alice meeting",
@@ -347,129 +349,6 @@ def test_calendar_tools():
     logger.info(f"Result Delete: {result}")
 
     logger.info("Tests completed.")
-
-
-def process_calendar_request(query: str, hka_context: str, user_intent: str = None) -> dict:
-    """
-    Main calendar agent function that processes user intent with HKA context.
-    """
-    if user_intent is None:
-        user_intent = query
-
-    # Enhanced intent detection with better keyword matching
-    intent_lower = user_intent.lower()
-
-    # TIMETABLE/SCHEDULE QUERY intents - NEW
-    timetable_keywords = ["vorlesung", "veranstaltung", "stundenplan", "termine", "wann ist", "welche vorlesung", "kurs"]
-    if any(keyword in intent_lower for keyword in timetable_keywords) and hka_context:
-        # Return timetable information from HKA context
-        return {"message": f"📅 Stundenplan-Informationen:\n{hka_context}", "events": [], "confidence": 0.9}  # Could be enhanced to parse events from hka_context
-
-    # CREATE intents
-    create_keywords = ["erstelle", "plane", "trage ein", "add", "create", "hinzufügen", "eintragen", "importiere"]
-    if any(keyword in intent_lower for keyword in create_keywords):
-        return _handle_create_from_hka(hka_context, user_intent)
-
-    # POSTPONE intents
-    postpone_keywords = ["verschiebe", "postpone", "später", "verlege", "ändere zeit"]
-    if any(keyword in intent_lower for keyword in postpone_keywords):
-        result = postpone_event_tool.invoke({"user_query": user_intent})
-        return {"message": result, "events": [], "confidence": 0.9}
-
-    # DELETE intents
-    delete_keywords = ["lösche", "cancel", "delete", "absage", "entferne", "storniere"]
-    if any(keyword in intent_lower for keyword in delete_keywords):
-        result = delete_event_tool.invoke({"user_query": user_intent})
-        return {"message": result, "events": [], "confidence": 0.9}
-
-    # LIST intents
-    list_keywords = ["zeige", "list", "welche termine", "übersicht", "termine", "anzeigen", "auflisten"]
-    if any(keyword in intent_lower for keyword in list_keywords):
-        # Check if asking for timetable or calendar events
-        if any(kw in intent_lower for kw in timetable_keywords) and hka_context:
-            return {"message": f"📅 Stundenplan-Übersicht:\n{hka_context}", "events": [], "confidence": 0.9}
-        else:
-            return _handle_list_events(user_intent)
-
-    # Default: provide HKA information with suggestion for calendar actions
-    suggestion = "\n\nMögliche Aktionen: 'Erstelle Termine', 'Zeige meine Termine', 'Lösche Termin X'"
-    return {"message": f"HKA-Stundenplan Informationen:\n{hka_context}{suggestion}", "events": [], "confidence": 0.7}
-
-
-def _handle_create_from_hka(hka_context: str, user_intent: str) -> dict:
-    """Extract events from HKA context and create calendar entries"""
-    import re
-    from datetime import datetime, timedelta
-
-    try:
-        # Parse HKA context for event details using LLM
-        extraction_prompt = (
-            f"Extract calendar events from this HKA timetable information:\n"
-            f"You can only plan events for the upcoming week"
-            f"To create events ignore the date information and only use the day of the week and time.\n"
-            f"{hka_context}\n\n"
-            f"User intent: {user_intent}\n\n"
-            f"Extract event details and respond ONLY with valid JSON array (no other text):\n"
-            f'[{{"title": "Course Name", "start_date": "YYYY-MM-DD", "start_time": "HH:MM", "end_time": "HH:MM", "location": "Room", "description": "Details"}}]'
-            f"if no events found, respond with empty array []"
-        )
-
-        messages = [{"role": "user", "content": extraction_prompt}]
-        llm_response = llm.chat(messages)
-
-        import json
-
-        events_data = json.loads(llm_response.strip())
-
-        created_events = []
-        for event in events_data:
-            # Convert to datetime format
-            start_datetime = f"{event['start_date']}T{event['start_time']}:00"
-            end_datetime = f"{event['start_date']}T{event['end_time']}:00"
-
-            result = create_event_tool.invoke(
-                {"start_datetime": start_datetime, "end_datetime": end_datetime, "summary": event["title"], "location": event.get("location", ""), "description": event.get("description", "")}
-            )
-            created_events.append(result)
-
-        return {"message": f"✅ Created {len(created_events)} events from HKA timetable", "events": created_events, "confidence": 0.9}
-
-    except Exception as e:
-        return {"message": f"❌ Error creating events from HKA data: {str(e)}", "events": [], "confidence": 0.3}
-
-
-def _handle_list_events(user_intent: str) -> dict:
-    """List calendar events based on user intent"""
-    try:
-        # Determine time range from user intent
-        now = datetime.now()
-
-        if any(word in user_intent.lower() for word in ["heute", "today"]):
-            start_time = now.replace(hour=0, minute=0, second=0)
-            end_time = start_time + timedelta(days=1)
-        elif any(word in user_intent.lower() for word in ["morgen", "tomorrow"]):
-            start_time = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0)
-            end_time = start_time + timedelta(days=1)
-        elif any(word in user_intent.lower() for word in ["woche", "week"]):
-            start_time = now
-            end_time = now + timedelta(weeks=1)
-        else:
-            # Default: next 7 days
-            start_time = now
-            end_time = now + timedelta(days=7)
-
-        events = list_events_tool.invoke({"start_datetime": start_time.strftime("%Y-%m-%dT%H:%M:%S"), "end_datetime": end_time.strftime("%Y-%m-%dT%H:%M:%S"), "max_results": 20})
-
-        if not events:
-            message = "Keine Termine im angegebenen Zeitraum gefunden."
-        else:
-            event_list = "\n".join([f"• {event.get('summary', 'Kein Titel')} - {event.get('start')} bis {event.get('end')}" for event in events])
-            message = f"Gefundene Termine ({len(events)}):\n{event_list}"
-
-        return {"message": message, "events": events, "confidence": 0.9}
-
-    except Exception as e:
-        return {"message": f"❌ Fehler beim Abrufen der Termine: {str(e)}", "events": [], "confidence": 0.3}
 
 
 if __name__ == "__main__":
