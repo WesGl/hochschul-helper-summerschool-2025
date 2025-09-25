@@ -35,16 +35,6 @@ logger = logging.getLogger(__name__)
 CALENDAR_AGENT_MODEL = os.getenv("CALENDAR_AGENT_MODEL", "deepseek/deepseek-chat-v3.1:free")
 llm = LLM(CALENDAR_AGENT_MODEL)
 
-# llm = ChatOpenAI(
-#     model="gpt-4o-mini",
-#     temperature=0,
-#     max_tokens=None,
-#     timeout=None,
-#     max_retries=2,
-#     api_key=OPENROUTER_API_KEY,
-#     base_url="https://openrouter.ai/api/v1",
-# )
-
 
 @tool
 def create_event_tool(
@@ -357,6 +347,116 @@ def test_calendar_tools():
     logger.info(f"Result Delete: {result}")
 
     logger.info("Tests completed.")
+
+
+def process_calendar_request(query: str, hka_context: str, user_intent: str = None) -> dict:
+    """
+    Main calendar agent function that processes user intent with HKA context.
+    """
+    if user_intent is None:
+        user_intent = query
+
+    # Enhanced intent detection with better keyword matching
+    intent_lower = user_intent.lower()
+
+    # CREATE intents
+    create_keywords = ["erstelle", "plane", "trage ein", "add", "create", "hinzufügen", "eintragen", "importiere"]
+    if any(keyword in intent_lower for keyword in create_keywords):
+        return _handle_create_from_hka(hka_context, user_intent)
+
+    # POSTPONE intents
+    postpone_keywords = ["verschiebe", "postpone", "später", "verlege", "ändere zeit"]
+    if any(keyword in intent_lower for keyword in postpone_keywords):
+        result = postpone_event_tool.invoke({"user_query": user_intent})
+        return {"message": result, "events": [], "confidence": 0.9}
+
+    # DELETE intents
+    delete_keywords = ["lösche", "cancel", "delete", "absage", "entferne", "storniere"]
+    if any(keyword in intent_lower for keyword in delete_keywords):
+        result = delete_event_tool.invoke({"user_query": user_intent})
+        return {"message": result, "events": [], "confidence": 0.9}
+
+    # LIST intents
+    list_keywords = ["zeige", "list", "welche termine", "übersicht", "termine", "anzeigen", "auflisten"]
+    if any(keyword in intent_lower for keyword in list_keywords):
+        return _handle_list_events(user_intent)
+
+    # Default: provide HKA information with suggestion for calendar actions
+    suggestion = "\n\nMögliche Aktionen: 'Erstelle Termine', 'Zeige meine Termine', 'Lösche Termin X'"
+    return {"message": f"HKA-Stundenplan Informationen:\n{hka_context}{suggestion}", "events": [], "confidence": 0.7}
+
+
+def _handle_create_from_hka(hka_context: str, user_intent: str) -> dict:
+    """Extract events from HKA context and create calendar entries"""
+    import re
+    from datetime import datetime, timedelta
+
+    try:
+        # Parse HKA context for event details using LLM
+        extraction_prompt = (
+            f"Extract calendar events from this HKA timetable information:\n"
+            f"{hka_context}\n\n"
+            f"User intent: {user_intent}\n\n"
+            f"Extract event details and respond with JSON array:\n"
+            f'[{{"title": "Course Name", "start_date": "YYYY-MM-DD", "start_time": "HH:MM", "end_time": "HH:MM", "location": "Room", "description": "Details"}}]'
+        )
+
+        messages = [{"role": "user", "content": extraction_prompt}]
+        llm_response = llm.chat(messages)
+
+        import json
+
+        events_data = json.loads(llm_response.strip())
+
+        created_events = []
+        for event in events_data:
+            # Convert to datetime format
+            start_datetime = f"{event['start_date']}T{event['start_time']}:00"
+            end_datetime = f"{event['start_date']}T{event['end_time']}:00"
+
+            result = create_event_tool.invoke(
+                {"start_datetime": start_datetime, "end_datetime": end_datetime, "summary": event["title"], "location": event.get("location", ""), "description": event.get("description", "")}
+            )
+            created_events.append(result)
+
+        return {"message": f"✅ Created {len(created_events)} events from HKA timetable", "events": created_events, "confidence": 0.9}
+
+    except Exception as e:
+        return {"message": f"❌ Error creating events from HKA data: {str(e)}", "events": [], "confidence": 0.3}
+
+
+def _handle_list_events(user_intent: str) -> dict:
+    """List calendar events based on user intent"""
+    try:
+        # Determine time range from user intent
+        now = datetime.now()
+
+        if any(word in user_intent.lower() for word in ["heute", "today"]):
+            start_time = now.replace(hour=0, minute=0, second=0)
+            end_time = start_time + timedelta(days=1)
+        elif any(word in user_intent.lower() for word in ["morgen", "tomorrow"]):
+            start_time = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0)
+            end_time = start_time + timedelta(days=1)
+        elif any(word in user_intent.lower() for word in ["woche", "week"]):
+            start_time = now
+            end_time = now + timedelta(weeks=1)
+        else:
+            # Default: next 7 days
+            start_time = now
+            end_time = now + timedelta(days=7)
+
+        events = list_events_tool.invoke({"start_datetime": start_time.strftime("%Y-%m-%dT%H:%M:%S"), "end_datetime": end_time.strftime("%Y-%m-%dT%H:%M:%S"), "max_results": 20})
+
+        if not events:
+            message = "Keine Termine im angegebenen Zeitraum gefunden."
+        else:
+            event_list = "\n".join([f"• {event.get('summary', 'Kein Titel')} - {event.get('start')} bis {event.get('end')}" for event in events])
+            message = f"Gefundene Termine ({len(events)}):\n{event_list}"
+
+        return {"message": message, "events": events, "confidence": 0.9}
+
+    except Exception as e:
+        return {"message": f"❌ Fehler beim Abrufen der Termine: {str(e)}", "events": [], "confidence": 0.3}
 
 
 if __name__ == "__main__":

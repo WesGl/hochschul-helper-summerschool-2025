@@ -12,8 +12,11 @@ from ..models import LLM
 
 # ----------------- Konfiguration -----------------
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
-SEARCH_MODEL = os.getenv("RAG_MODEL", "openai/gpt-4o-mini")  # wird für Summarize & Router genutzt
+# SEARCH_MODEL = os.getenv("RAG_MODEL", "openai/gpt-4o-mini")  # wird für Summarize & Router genutzt
+SEARCH_MODEL = os.getenv("RAG_MODEL", "deepseek/deepseek-chat-v3.1:free")  # wird für Summarize & Router genutzt
+
 _llm = LLM(SEARCH_MODEL)
+
 client = TavilyClient(api_key=TAVILY_API_KEY)
 
 # Platzhalter-Domains – nachträglich mit echten Domains ersetzen
